@@ -22,6 +22,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/chat" element={<ChatPage />} />
+          <Route path="/voice" element={<VoiceAnalysis />} />
           <Route path="/mood" element={<MoodDashboard />} />
           <Route path="/breathe" element={<BreathePage />} />
           <Route path="/login" element={<LoginPage />} />
