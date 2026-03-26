@@ -6,6 +6,7 @@ import { useState } from "react";
 const navLinks = [
   { to: "/", label: "Home" },
   { to: "/chat", label: "AI Chat" },
+  { to: "/voice", label: "Voice" },
   { to: "/mood", label: "Mood" },
   { to: "/breathe", label: "Breathe" },
 ];
