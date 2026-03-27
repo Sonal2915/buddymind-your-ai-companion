@@ -8,6 +8,7 @@ import VoiceAnalysis from "./pages/VoiceAnalysis";
 import ChatPage from "./pages/ChatPage";
 import MoodDashboard from "./pages/MoodDashboard";
 import BreathePage from "./pages/BreathePage";
+import ReportPage from "./pages/ReportPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/voice" element={<VoiceAnalysis />} />
           <Route path="/mood" element={<MoodDashboard />} />
           <Route path="/breathe" element={<BreathePage />} />
+          <Route path="/report" element={<ReportPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
