@@ -9,6 +9,7 @@ const navLinks = [
   { to: "/voice", label: "Voice" },
   { to: "/mood", label: "Mood" },
   { to: "/breathe", label: "Breathe" },
+  { to: "/report", label: "Report" },
 ];
 
 const Navbar = () => {
