@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Mail, Lock, User, ArrowRight, Brain } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 const LoginPage = () => {
+  const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -11,7 +13,12 @@ const LoginPage = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Placeholder — will connect to Lovable Cloud auth
+    if (!email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    toast.success(isLogin ? "Signed in successfully!" : "Account created!");
+    navigate("/");
   };
 
   return (
