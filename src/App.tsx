@@ -29,6 +29,8 @@ const App = () => (
           <Route path="/mood" element={<MoodDashboard />} />
           <Route path="/breathe" element={<BreathePage />} />
           <Route path="/report" element={<ReportPage />} />
+          <Route path="/questionnaire" element={<QuestionnairePage />} />
+          <Route path="/emotion" element={<EmotionDetectionPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
