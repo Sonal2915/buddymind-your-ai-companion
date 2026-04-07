@@ -9,6 +9,8 @@ import ChatPage from "./pages/ChatPage";
 import MoodDashboard from "./pages/MoodDashboard";
 import BreathePage from "./pages/BreathePage";
 import ReportPage from "./pages/ReportPage";
+import QuestionnairePage from "./pages/QuestionnairePage";
+import EmotionDetectionPage from "./pages/EmotionDetectionPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 
