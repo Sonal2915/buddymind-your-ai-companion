@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Bot, User, Sparkles } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import Navbar from "@/components/Navbar";
 
 type Message = {
@@ -18,14 +19,6 @@ const sentimentColors: Record<string, string> = {
   anxious: "bg-yellow-500/20 text-yellow-400",
 };
 
-const aiResponses = [
-  { text: "I hear you, and I want you to know that your feelings are completely valid. It's okay to feel this way. Would you like to try a quick breathing exercise together?", sentiment: "positive" },
-  { text: "That sounds really challenging. Remember, it's a sign of strength to talk about how you feel. What's one small thing that brought you comfort today?", sentiment: "positive" },
-  { text: "I'm here for you. Sometimes just expressing what we feel can be a powerful step. Would you like to explore some coping strategies?", sentiment: "positive" },
-  { text: "Thank you for sharing that with me. Your mental health journey is unique, and every step forward counts — even the small ones. 💜", sentiment: "positive" },
-  { text: "It sounds like you're carrying a lot right now. Let's take it one moment at a time. Have you tried journaling your thoughts? It can help process emotions.", sentiment: "neutral" },
-];
-
 const detectSentiment = (text: string): string => {
   const lower = text.toLowerCase();
   if (/sad|depress|cry|hurt|pain|lonely|hopeless|anxious|worry|scared/.test(lower)) return "stressed";
@@ -34,6 +27,8 @@ const detectSentiment = (text: string): string => {
   if (/stress|overwhelm|pressure|tired|exhaust/.test(lower)) return "anxious";
   return "neutral";
 };
+
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
 const ChatPage = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -52,22 +47,96 @@ const ChatPage = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
+  const handleSend = async () => {
+    if (!input.trim() || isTyping) return;
     const userSentiment = detectSentiment(input);
     const userMsg: Message = { id: Date.now(), role: "user", content: input, sentiment: userSentiment };
-    setMessages((prev) => [...prev, userMsg]);
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     setInput("");
     setIsTyping(true);
 
-    setTimeout(() => {
-      const resp = aiResponses[Math.floor(Math.random() * aiResponses.length)];
+    // Build conversation history for the AI (exclude sentiment, id)
+    const apiMessages = updatedMessages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    let assistantContent = "";
+
+    try {
+      const resp = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ messages: apiMessages }),
+      });
+
+      if (!resp.ok || !resp.body) {
+        throw new Error(`Request failed: ${resp.status}`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let textBuffer = "";
+
+      const assistantId = Date.now() + 1;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        textBuffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (line.startsWith(":") || line.trim() === "") continue;
+          if (!line.startsWith("data: ")) continue;
+
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") break;
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              assistantContent += content;
+              const sentiment = detectSentiment(assistantContent);
+              setMessages((prev) => {
+                const last = prev[prev.length - 1];
+                if (last?.role === "assistant" && last.id === assistantId) {
+                  return prev.map((m, i) =>
+                    i === prev.length - 1 ? { ...m, content: assistantContent, sentiment } : m
+                  );
+                }
+                return [...prev, { id: assistantId, role: "assistant", content: assistantContent, sentiment }];
+              });
+            }
+          } catch {
+            textBuffer = line + "\n" + textBuffer;
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Chat error:", e);
       setMessages((prev) => [
         ...prev,
-        { id: Date.now() + 1, role: "assistant", content: resp.text, sentiment: resp.sentiment },
+        {
+          id: Date.now() + 2,
+          role: "assistant",
+          content: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment. 💜",
+          sentiment: "neutral",
+        },
       ]);
+    } finally {
       setIsTyping(false);
-    }, 1500 + Math.random() * 1000);
+    }
   };
 
   return (
@@ -94,7 +163,13 @@ const ChatPage = () => {
                   <div className={`glass-card p-4 text-sm leading-relaxed ${
                     msg.role === "user" ? "bg-primary/15 border-primary/20" : ""
                   }`}>
-                    {msg.content}
+                    {msg.role === "assistant" ? (
+                      <div className="prose prose-sm prose-invert max-w-none">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      msg.content
+                    )}
                   </div>
                   {msg.sentiment && (
                     <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${sentimentColors[msg.sentiment] || sentimentColors.neutral}`}>
@@ -106,7 +181,7 @@ const ChatPage = () => {
             ))}
           </AnimatePresence>
 
-          {isTyping && (
+          {isTyping && !messages[messages.length - 1]?.content && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3">
               <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
                 <Bot className="w-4 h-4 text-primary" />
@@ -136,7 +211,7 @@ const ChatPage = () => {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleSend}
-              disabled={!input.trim()}
+              disabled={!input.trim() || isTyping}
               className="w-9 h-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-30 transition-opacity"
             >
               <Send className="w-4 h-4" />
