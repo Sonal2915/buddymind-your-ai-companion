@@ -10,6 +10,8 @@ const navLinks = [
   { to: "/mood", label: "Mood" },
   { to: "/breathe", label: "Breathe" },
   { to: "/report", label: "Report" },
+  { to: "/questionnaire", label: "Assessment" },
+  { to: "/emotion", label: "Emotion" },
 ];
 
 const Navbar = () => {

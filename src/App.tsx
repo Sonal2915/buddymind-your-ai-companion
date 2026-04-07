@@ -9,6 +9,8 @@ import ChatPage from "./pages/ChatPage";
 import MoodDashboard from "./pages/MoodDashboard";
 import BreathePage from "./pages/BreathePage";
 import ReportPage from "./pages/ReportPage";
+import QuestionnairePage from "./pages/QuestionnairePage";
+import EmotionDetectionPage from "./pages/EmotionDetectionPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 
@@ -27,6 +29,8 @@ const App = () => (
           <Route path="/mood" element={<MoodDashboard />} />
           <Route path="/breathe" element={<BreathePage />} />
           <Route path="/report" element={<ReportPage />} />
+          <Route path="/questionnaire" element={<QuestionnairePage />} />
+          <Route path="/emotion" element={<EmotionDetectionPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
