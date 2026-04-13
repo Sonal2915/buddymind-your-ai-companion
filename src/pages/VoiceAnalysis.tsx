@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, Activity, Brain, RefreshCw } from "lucide-react";
+import { Mic, MicOff, Activity, Brain, RefreshCw, AlertCircle } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import { toast } from "sonner";
 
 type Emotion = {
   label: string;
@@ -16,26 +17,29 @@ const emotionMap: Record<string, { emoji: string; color: string }> = {
   Sad: { emoji: "😢", color: "from-blue-500/20 to-indigo-500/20 border-blue-500/30" },
   Angry: { emoji: "😠", color: "from-red-500/20 to-orange-500/20 border-red-500/30" },
   Stressed: { emoji: "😰", color: "from-orange-500/20 to-yellow-500/20 border-orange-500/30" },
+  Fearful: { emoji: "😨", color: "from-purple-500/20 to-violet-500/20 border-purple-500/30" },
+  Surprised: { emoji: "😲", color: "from-yellow-500/20 to-amber-500/20 border-yellow-500/30" },
+  Disgusted: { emoji: "🤢", color: "from-lime-500/20 to-green-500/20 border-lime-500/30" },
   Neutral: { emoji: "😐", color: "from-muted/40 to-secondary/40 border-border/50" },
 };
+
+const VOICE_EMOTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-emotion`;
 
 const VoiceAnalysis = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<Emotion[] | null>(null);
+  const [analysisSummary, setAnalysisSummary] = useState<string>("");
   const [duration, setDuration] = useState(0);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const animFrameRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval>>();
-
-  // Audio feature accumulators
-  const rmsHistoryRef = useRef<number[]>([]);
-  const pitchHistoryRef = useRef<number[]>([]);
-  const zcHistoryRef = useRef<number[]>([]);
 
   const drawWaveform = useCallback(() => {
     const canvas = canvasRef.current;
@@ -52,37 +56,6 @@ const VoiceAnalysis = () => {
       analyser.getByteFrequencyData(dataArray);
       analyser.getByteTimeDomainData(timeData);
 
-      // Compute RMS
-      let sumSq = 0;
-      let zeroCrossings = 0;
-      for (let i = 0; i < timeData.length; i++) {
-        const v = (timeData[i] - 128) / 128;
-        sumSq += v * v;
-        if (i > 0) {
-          const prev = (timeData[i - 1] - 128) / 128;
-          if ((v >= 0 && prev < 0) || (v < 0 && prev >= 0)) zeroCrossings++;
-        }
-      }
-      const rms = Math.sqrt(sumSq / timeData.length);
-      rmsHistoryRef.current.push(rms);
-      zcHistoryRef.current.push(zeroCrossings);
-
-      // Estimate pitch from dominant frequency bin
-      let maxVal = 0;
-      let maxIndex = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        if (dataArray[i] > maxVal) {
-          maxVal = dataArray[i];
-          maxIndex = i;
-        }
-      }
-      const sampleRate = audioContextRef.current?.sampleRate || 44100;
-      const dominantFreq = (maxIndex * sampleRate) / (analyser.fftSize);
-      if (dominantFreq > 50 && dominantFreq < 1000) {
-        pitchHistoryRef.current.push(dominantFreq);
-      }
-
-      // Draw
       const w = canvas.width;
       const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
@@ -143,17 +116,28 @@ const VoiceAnalysis = () => {
       source.connect(analyser);
       analyserRef.current = analyser;
 
-      rmsHistoryRef.current = [];
-      pitchHistoryRef.current = [];
-      zcHistoryRef.current = [];
+      // Set up MediaRecorder for capturing audio
+      audioChunksRef.current = [];
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "audio/webm",
+      });
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      mediaRecorder.start(250); // collect chunks every 250ms
+      mediaRecorderRef.current = mediaRecorder;
+
       setDuration(0);
       setResult(null);
+      setAnalysisSummary("");
       setIsRecording(true);
 
       timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
       drawWaveform();
     } catch {
-      alert("Microphone access is required for voice analysis.");
+      toast.error("Microphone access is required for voice analysis.");
     }
   };
 
@@ -162,125 +146,70 @@ const VoiceAnalysis = () => {
     cancelAnimationFrame(animFrameRef.current);
     clearInterval(timerRef.current);
 
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
+        sendForAnalysis(blob, recorder.mimeType);
+      };
+      recorder.stop();
+    }
+
     mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
     audioContextRef.current?.close();
-
-    analyzeEmotion();
   };
 
-  const analyzeEmotion = () => {
+  const sendForAnalysis = async (audioBlob: Blob, mimeType: string) => {
     setIsAnalyzing(true);
-
-    setTimeout(() => {
-      const rmsArr = rmsHistoryRef.current;
-      const pitchArr = pitchHistoryRef.current;
-      const zcArr = zcHistoryRef.current;
-
-      // Compute features
-      const avgRms = rmsArr.length ? rmsArr.reduce((a, b) => a + b, 0) / rmsArr.length : 0;
-      const rmsVariance = rmsArr.length
-        ? rmsArr.reduce((a, b) => a + (b - avgRms) ** 2, 0) / rmsArr.length
-        : 0;
-      const avgPitch = pitchArr.length ? pitchArr.reduce((a, b) => a + b, 0) / pitchArr.length : 200;
-      const pitchVariance = pitchArr.length
-        ? pitchArr.reduce((a, b) => a + (b - avgPitch) ** 2, 0) / pitchArr.length
-        : 0;
-      const avgZc = zcArr.length ? zcArr.reduce((a, b) => a + b, 0) / zcArr.length : 0;
-
-      // Rule-based classification using audio features
-      const scores: Record<string, number> = {
-        Happy: 0,
-        Calm: 0,
-        Sad: 0,
-        Angry: 0,
-        Stressed: 0,
-        Neutral: 0,
-      };
-
-      // High energy + high pitch variance → Happy or Angry
-      if (avgRms > 0.15) {
-        scores.Angry += 25;
-        scores.Happy += 15;
-        scores.Stressed += 10;
+    try {
+      // Convert blob to base64
+      const buffer = await audioBlob.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
       }
-      if (avgRms > 0.25) {
-        scores.Angry += 20;
+      const base64 = btoa(binary);
+
+      const resp = await fetch(VOICE_EMOTION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ audio_base64: base64, mime_type: mimeType }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "Analysis failed" }));
+        throw new Error(err.error || `Error ${resp.status}`);
       }
 
-      // Low energy → Sad or Calm
-      if (avgRms < 0.08) {
-        scores.Sad += 25;
-        scores.Calm += 20;
-      }
+      const data = await resp.json();
 
-      // High pitch → Happy, Stressed
-      if (avgPitch > 250) {
-        scores.Happy += 20;
-        scores.Stressed += 15;
-      }
-
-      // Low pitch → Sad, Calm
-      if (avgPitch < 180) {
-        scores.Sad += 15;
-        scores.Calm += 15;
-      }
-
-      // High pitch variance → Stressed, Happy
-      if (pitchVariance > 3000) {
-        scores.Stressed += 20;
-        scores.Happy += 10;
-      }
-
-      // Low pitch variance → Calm, Neutral
-      if (pitchVariance < 1000) {
-        scores.Calm += 15;
-        scores.Neutral += 20;
-      }
-
-      // High RMS variance → Angry, Stressed
-      if (rmsVariance > 0.01) {
-        scores.Angry += 15;
-        scores.Stressed += 15;
-      }
-
-      // Low RMS variance → Calm
-      if (rmsVariance < 0.003) {
-        scores.Calm += 15;
-      }
-
-      // Zero crossing rate
-      if (avgZc > 50) {
-        scores.Stressed += 10;
-        scores.Angry += 10;
-      }
-      if (avgZc < 20) {
-        scores.Calm += 10;
-        scores.Neutral += 10;
-      }
-
-      // Neutral baseline
-      scores.Neutral += 10;
-
-      // Normalize to percentages
-      const total = Object.values(scores).reduce((a, b) => a + b, 0) || 1;
-      const emotions: Emotion[] = Object.entries(scores)
-        .map(([label, score]) => ({
-          label,
-          emoji: emotionMap[label].emoji,
-          confidence: Math.round((score / total) * 100),
-          color: emotionMap[label].color,
+      const emotions: Emotion[] = (data.emotions || [])
+        .map((e: { label: string; confidence: number }) => ({
+          label: e.label,
+          emoji: emotionMap[e.label]?.emoji || "🔮",
+          confidence: Math.round(e.confidence),
+          color: emotionMap[e.label]?.color || "from-muted/40 to-secondary/40 border-border/50",
         }))
-        .sort((a, b) => b.confidence - a.confidence);
+        .sort((a: Emotion, b: Emotion) => b.confidence - a.confidence);
 
       setResult(emotions);
+      setAnalysisSummary(data.analysis_summary || "");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Analysis failed";
+      toast.error(message);
+    } finally {
       setIsAnalyzing(false);
-    }, 2000);
+    }
   };
 
   const reset = () => {
     setResult(null);
+    setAnalysisSummary("");
     setDuration(0);
-    // Clear canvas
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d")!;
@@ -307,11 +236,19 @@ const VoiceAnalysis = () => {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 mb-4">
             <Activity className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium text-primary">Voice Analysis</span>
+            <span className="text-sm font-medium text-primary">AI Voice Analysis</span>
           </div>
           <h1 className="font-display text-3xl font-bold text-foreground mb-2">Voice Emotion Detection</h1>
-          <p className="text-muted-foreground">Record your voice and let AI analyze your emotional state through tone, pitch, and energy.</p>
+          <p className="text-muted-foreground">
+            Record your voice and AI will analyze pitch, energy, rhythm, and spectral features to detect your emotional state.
+          </p>
         </motion.div>
+
+        {/* Disclaimer */}
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border mb-6 text-sm text-muted-foreground">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>This system is not a clinical diagnostic tool. Results are for informational purposes only.</span>
+        </div>
 
         {/* Waveform */}
         <motion.div
@@ -320,12 +257,7 @@ const VoiceAnalysis = () => {
           className="glass-card p-6 mb-8"
         >
           <div className="relative rounded-xl overflow-hidden bg-background/30 mb-6">
-            <canvas
-              ref={canvasRef}
-              width={800}
-              height={200}
-              className="w-full h-48"
-            />
+            <canvas ref={canvasRef} width={800} height={200} className="w-full h-48" />
             {!isRecording && !result && !isAnalyzing && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <p className="text-muted-foreground text-sm">Press record to start voice analysis</p>
@@ -335,7 +267,7 @@ const VoiceAnalysis = () => {
               <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
                 <div className="flex items-center gap-3">
                   <Brain className="w-5 h-5 text-primary animate-spin" />
-                  <p className="text-foreground font-medium">Analyzing emotions...</p>
+                  <p className="text-foreground font-medium">AI analyzing your voice...</p>
                 </div>
               </div>
             )}
@@ -392,11 +324,7 @@ const VoiceAnalysis = () => {
         {/* Results */}
         <AnimatePresence>
           {result && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-            >
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               {/* Dominant emotion */}
               {dominant && (
                 <motion.div
@@ -415,6 +343,22 @@ const VoiceAnalysis = () => {
                   </motion.div>
                   <h2 className="font-display text-2xl font-bold text-foreground mb-1">{dominant.label}</h2>
                   <p className="text-muted-foreground text-sm">Detected with {dominant.confidence}% confidence</p>
+                </motion.div>
+              )}
+
+              {/* Analysis summary */}
+              {analysisSummary && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="glass-card p-5 mb-6"
+                >
+                  <h3 className="font-semibold text-sm text-foreground mb-2 flex items-center gap-2">
+                    <Brain className="w-4 h-4 text-primary" />
+                    AI Analysis
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{analysisSummary}</p>
                 </motion.div>
               )}
 
