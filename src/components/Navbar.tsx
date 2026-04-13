@@ -12,6 +12,7 @@ const navLinks = [
   { to: "/report", label: "Report" },
   { to: "/questionnaire", label: "Assessment" },
   { to: "/emotion", label: "Emotion" },
+  { to: "/games", label: "Games" },
 ];
 
 const Navbar = () => {
