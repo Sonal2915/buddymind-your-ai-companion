@@ -1,8 +1,11 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Bot, User, Sparkles } from "lucide-react";
+import { Send, Bot, User, Sparkles, AlertCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import Navbar from "@/components/Navbar";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 type Message = {
   id: number;
@@ -31,21 +34,49 @@ const detectSentiment = (text: string): string => {
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
 const ChatPage = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 0,
-      role: "assistant",
-      content: "Hi there! 💜 I'm BuddyMind, your AI mental health companion. I'm here to listen, support, and help you feel better. How are you feeling today?",
-      sentiment: "positive",
-    },
-  ]);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [questionnaireDone, setQuestionnaireDone] = useState(false);
+  const [emotionalState, setEmotionalState] = useState("neutral");
+  const sessionIdRef = useRef(crypto.randomUUID());
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const done = localStorage.getItem("buddymind_questionnaire_done");
+    const state = localStorage.getItem("buddymind_emotional_state") || "neutral";
+    setEmotionalState(state);
+
+    if (!done) {
+      setQuestionnaireDone(false);
+    } else {
+      setQuestionnaireDone(true);
+      setMessages([
+        {
+          id: 0,
+          role: "assistant",
+          content: `Hi there! 💜 I'm BuddyMind. Based on your check-in, I understand you're feeling **${state}**. I'm here to listen, support, and help you feel better. How would you like to start?`,
+          sentiment: "positive",
+        },
+      ]);
+    }
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
+
+  const saveMessage = useCallback(async (role: "user" | "assistant", content: string) => {
+    if (!user) return;
+    await supabase.from("chat_messages").insert({
+      user_id: user.id,
+      session_id: sessionIdRef.current,
+      role,
+      content,
+    });
+  }, [user]);
 
   const handleSend = async () => {
     if (!input.trim() || isTyping) return;
@@ -56,12 +87,9 @@ const ChatPage = () => {
     setInput("");
     setIsTyping(true);
 
-    // Build conversation history for the AI (exclude sentiment, id)
-    const apiMessages = updatedMessages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    saveMessage("user", input);
 
+    const apiMessages = updatedMessages.map((m) => ({ role: m.role, content: m.content }));
     let assistantContent = "";
 
     try {
@@ -71,17 +99,14 @@ const ChatPage = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({ messages: apiMessages, emotional_state: emotionalState }),
       });
 
-      if (!resp.ok || !resp.body) {
-        throw new Error(`Request failed: ${resp.status}`);
-      }
+      if (!resp.ok || !resp.body) throw new Error(`Request failed: ${resp.status}`);
 
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let textBuffer = "";
-
       const assistantId = Date.now() + 1;
 
       while (true) {
@@ -93,14 +118,11 @@ const ChatPage = () => {
         while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
           let line = textBuffer.slice(0, newlineIndex);
           textBuffer = textBuffer.slice(newlineIndex + 1);
-
           if (line.endsWith("\r")) line = line.slice(0, -1);
           if (line.startsWith(":") || line.trim() === "") continue;
           if (!line.startsWith("data: ")) continue;
-
           const jsonStr = line.slice(6).trim();
           if (jsonStr === "[DONE]") break;
-
           try {
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
@@ -110,9 +132,7 @@ const ChatPage = () => {
               setMessages((prev) => {
                 const last = prev[prev.length - 1];
                 if (last?.role === "assistant" && last.id === assistantId) {
-                  return prev.map((m, i) =>
-                    i === prev.length - 1 ? { ...m, content: assistantContent, sentiment } : m
-                  );
+                  return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantContent, sentiment } : m);
                 }
                 return [...prev, { id: assistantId, role: "assistant", content: assistantContent, sentiment }];
               });
@@ -123,100 +143,111 @@ const ChatPage = () => {
           }
         }
       }
+
+      if (assistantContent) saveMessage("assistant", assistantContent);
     } catch (e) {
       console.error("Chat error:", e);
+      toast.error("Failed to get a response. Please try again.");
       setMessages((prev) => [
         ...prev,
-        {
-          id: Date.now() + 2,
-          role: "assistant",
-          content: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment. 💜",
-          sentiment: "neutral",
-        },
+        { id: Date.now() + 2, role: "assistant", content: "I'm sorry, I'm having trouble connecting right now. Please try again. 💜", sentiment: "neutral" },
       ]);
     } finally {
       setIsTyping(false);
     }
   };
 
-  return (
-    <div className="min-h-screen gradient-bg flex flex-col">
-      <Navbar />
-      <div className="flex-1 flex flex-col pt-16 max-w-3xl mx-auto w-full">
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-          <AnimatePresence>
-            {messages.map((msg) => (
-              <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
-              >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                  msg.role === "assistant" ? "bg-primary/20" : "bg-accent/20"
-                }`}>
-                  {msg.role === "assistant" ? <Bot className="w-4 h-4 text-primary" /> : <User className="w-4 h-4 text-accent" />}
-                </div>
-                <div className={`max-w-[75%] ${msg.role === "user" ? "text-right" : ""}`}>
-                  <div className={`glass-card p-4 text-sm leading-relaxed ${
-                    msg.role === "user" ? "bg-primary/15 border-primary/20" : ""
-                  }`}>
-                    {msg.role === "assistant" ? (
-                      <div className="prose prose-sm prose-invert max-w-none">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
-                      </div>
-                    ) : (
-                      msg.content
-                    )}
-                  </div>
-                  {msg.sentiment && (
-                    <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${sentimentColors[msg.sentiment] || sentimentColors.neutral}`}>
-                      {msg.sentiment}
-                    </span>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+  if (!questionnaireDone) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="glass-card p-8 text-center max-w-md space-y-4">
+          <AlertCircle className="w-10 h-10 text-primary mx-auto" />
+          <h2 className="font-display text-xl font-bold text-foreground">Complete Your Check-in First</h2>
+          <p className="text-sm text-muted-foreground">
+            Please complete the mental health questionnaire before starting a chat session. This helps me provide personalized support.
+          </p>
+          <button
+            onClick={() => navigate("/questionnaire")}
+            className="px-6 py-2.5 rounded-xl font-semibold bg-primary text-primary-foreground glow-primary text-sm"
+          >
+            Take Assessment
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-          {isTyping && !messages[messages.length - 1]?.content && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                <Bot className="w-4 h-4 text-primary" />
+  return (
+    <div className="flex-1 flex flex-col h-[calc(100vh-3.5rem)]">
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+        <AnimatePresence>
+          {messages.map((msg) => (
+            <motion.div
+              key={msg.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
+            >
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                msg.role === "assistant" ? "bg-primary/20" : "bg-accent/20"
+              }`}>
+                {msg.role === "assistant" ? <Bot className="w-4 h-4 text-primary" /> : <User className="w-4 h-4 text-accent" />}
               </div>
-              <div className="glass-card p-4 flex gap-1">
-                <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "150ms" }} />
-                <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "300ms" }} />
+              <div className={`max-w-[75%] ${msg.role === "user" ? "text-right" : ""}`}>
+                <div className={`glass-card p-4 text-sm leading-relaxed ${
+                  msg.role === "user" ? "bg-primary/15 border-primary/20" : ""
+                }`}>
+                  {msg.role === "assistant" ? (
+                    <div className="prose prose-sm prose-invert max-w-none">
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
+                  ) : msg.content}
+                </div>
+                {msg.sentiment && (
+                  <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${sentimentColors[msg.sentiment] || sentimentColors.neutral}`}>
+                    {msg.sentiment}
+                  </span>
+                )}
               </div>
             </motion.div>
-          )}
-          <div ref={bottomRef} />
-        </div>
+          ))}
+        </AnimatePresence>
 
-        {/* Input */}
-        <div className="p-4 border-t border-border/30">
-          <div className="glass-card flex items-center gap-2 p-2 pl-4">
-            <Sparkles className="w-4 h-4 text-primary/50 shrink-0" />
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              placeholder="How are you feeling today?"
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-            />
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleSend}
-              disabled={!input.trim() || isTyping}
-              className="w-9 h-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-30 transition-opacity"
-            >
-              <Send className="w-4 h-4" />
-            </motion.button>
-          </div>
+        {isTyping && !messages[messages.length - 1]?.content && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3">
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+              <Bot className="w-4 h-4 text-primary" />
+            </div>
+            <div className="glass-card p-4 flex gap-1">
+              <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+          </motion.div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="p-4 border-t border-border/30">
+        <div className="glass-card flex items-center gap-2 p-2 pl-4 max-w-3xl mx-auto">
+          <Sparkles className="w-4 h-4 text-primary/50 shrink-0" />
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            placeholder="How are you feeling today?"
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+          />
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleSend}
+            disabled={!input.trim() || isTyping}
+            className="w-9 h-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-30 transition-opacity"
+          >
+            <Send className="w-4 h-4" />
+          </motion.button>
         </div>
       </div>
     </div>

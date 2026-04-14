@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import Navbar from "@/components/Navbar";
 import { Camera, CameraOff, Play, Square, AlertTriangle, BarChart3, RefreshCw } from "lucide-react";
 
 const EMOTIONS = ["Happy", "Sad", "Angry", "Neutral", "Fear", "Surprise"] as const;
@@ -173,9 +172,7 @@ const EmotionDetectionPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      <div className="container mx-auto px-4 pt-24 pb-16 max-w-4xl">
+    <div className="p-6 container mx-auto max-w-4xl">
         {/* Disclaimer */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -343,7 +340,6 @@ const EmotionDetectionPage = () => {
             </AnimatePresence>
           </div>
         </div>
-      </div>
     </div>
   );
 };

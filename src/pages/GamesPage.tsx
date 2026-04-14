@@ -1,14 +1,11 @@
 import { motion } from "framer-motion";
 import { Gamepad2 } from "lucide-react";
-import Navbar from "@/components/Navbar";
 import BreathingExercise from "@/components/games/BreathingExercise";
 import MemoryGame from "@/components/games/MemoryGame";
 
 const GamesPage = () => {
   return (
-    <div className="min-h-screen gradient-bg">
-      <Navbar />
-      <div className="pt-24 pb-12 px-4 container mx-auto max-w-4xl">
+    <div className="p-6 container mx-auto max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -42,7 +39,6 @@ const GamesPage = () => {
             <MemoryGame />
           </motion.div>
         </div>
-      </div>
     </div>
   );
 };

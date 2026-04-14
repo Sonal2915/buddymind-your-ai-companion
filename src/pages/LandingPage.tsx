@@ -85,13 +85,13 @@ const LandingPage = () => {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/chat">
+              <Link to="/login">
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.97 }}
                   className="px-8 py-3.5 rounded-xl font-semibold bg-primary text-primary-foreground glow-primary transition-all text-base"
                 >
-                  Start Chatting
+                  Get Started
                 </motion.button>
               </Link>
               <Link to="/breathe">
@@ -160,7 +160,7 @@ const LandingPage = () => {
             <p className="text-muted-foreground mb-8">
               Take the first step towards better mental health. It's free, private, and always available.
             </p>
-            <Link to="/chat">
+            <Link to="/login">
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.97 }}

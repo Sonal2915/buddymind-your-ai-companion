@@ -2,7 +2,6 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
 import { Plus, TrendingUp, Calendar, Smile, Frown, Meh, Angry, AlertTriangle } from "lucide-react";
-import Navbar from "@/components/Navbar";
 
 const moodEmojis = [
   { label: "Happy", icon: Smile, color: "text-green-400", value: 5 },
@@ -44,9 +43,7 @@ const MoodDashboard = () => {
   const avgMood = (entries.reduce((a, b) => a + b.score, 0) / entries.length).toFixed(1);
 
   return (
-    <div className="min-h-screen gradient-bg">
-      <Navbar />
-      <div className="pt-24 pb-12 px-4 container mx-auto max-w-5xl">
+    <div className="p-6 container mx-auto max-w-5xl">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="font-display text-3xl font-bold text-foreground mb-2">Mood Dashboard</h1>
           <p className="text-muted-foreground mb-8">Track and visualize your emotional wellness journey.</p>
@@ -160,7 +157,6 @@ const MoodDashboard = () => {
             Log Mood
           </motion.button>
         </motion.div>
-      </div>
     </div>
   );
 };

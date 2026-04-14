@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Wind, Play, Pause, RotateCcw, Quote } from "lucide-react";
-import Navbar from "@/components/Navbar";
 
 const quotes = [
   "You are enough, just as you are.",
@@ -57,9 +56,7 @@ const BreathePage = () => {
   const scale = phase.label === "Breathe In" ? 1.4 : phase.label === "Breathe Out" ? 1 : phaseIndex === 1 ? 1.4 : 1;
 
   return (
-    <div className="min-h-screen gradient-bg">
-      <Navbar />
-      <div className="pt-24 pb-12 px-4 container mx-auto max-w-3xl flex flex-col items-center">
+    <div className="p-6 container mx-auto max-w-3xl flex flex-col items-center">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent/10 border border-accent/20 mb-4">
             <Wind className="w-4 h-4 text-accent" />
@@ -138,7 +135,6 @@ const BreathePage = () => {
             </motion.p>
           </AnimatePresence>
         </motion.div>
-      </div>
     </div>
   );
 };

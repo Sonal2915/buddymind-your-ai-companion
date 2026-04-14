@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Mail, Lock, User, ArrowRight, Brain } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -10,20 +11,48 @@ const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       toast.error("Please fill in all fields");
       return;
     }
-    toast.success(isLogin ? "Signed in successfully!" : "Account created!");
-    navigate("/");
+    setLoading(true);
+
+    try {
+      if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        toast.success("Signed in successfully!");
+        navigate("/questionnaire");
+      } else {
+        if (!name.trim()) {
+          toast.error("Please enter your name");
+          setLoading(false);
+          return;
+        }
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: name },
+            emailRedirectTo: window.location.origin,
+          },
+        });
+        if (error) throw error;
+        toast.success("Check your email to verify your account!");
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Authentication failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen gradient-bg flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Ambient */}
       <div className="absolute top-1/3 left-1/4 w-80 h-80 rounded-full bg-primary/10 blur-[100px] animate-pulse-slow" />
       <div className="absolute bottom-1/3 right-1/4 w-64 h-64 rounded-full bg-accent/8 blur-[80px] animate-pulse-slow" style={{ animationDelay: "2s" }} />
 
@@ -104,10 +133,17 @@ const LoginPage = () => {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             type="submit"
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold bg-primary text-primary-foreground glow-primary mt-6"
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold bg-primary text-primary-foreground glow-primary mt-6 disabled:opacity-50"
           >
-            {isLogin ? "Sign In" : "Create Account"}
-            <ArrowRight className="w-4 h-4" />
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                {isLogin ? "Sign In" : "Create Account"}
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </motion.button>
         </form>
 
