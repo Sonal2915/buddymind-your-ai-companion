@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, MicOff, Activity, Brain, RefreshCw, AlertCircle } from "lucide-react";
-import Navbar from "@/components/Navbar";
 import { toast } from "sonner";
 
 type Emotion = {
@@ -230,9 +229,7 @@ const VoiceAnalysis = () => {
   const dominant = result?.[0];
 
   return (
-    <div className="min-h-screen gradient-bg">
-      <Navbar />
-      <div className="pt-24 pb-12 px-4 container mx-auto max-w-3xl">
+    <div className="p-6 container mx-auto max-w-3xl">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 mb-4">
             <Activity className="w-4 h-4 text-primary" />
@@ -389,7 +386,6 @@ const VoiceAnalysis = () => {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
     </div>
   );
 };

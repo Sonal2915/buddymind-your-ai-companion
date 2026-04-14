@@ -5,7 +5,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
 import { Download, FileText, TrendingUp, Heart, Brain, Sparkles, Calendar, Shield } from "lucide-react";
-import Navbar from "@/components/Navbar";
+import { Download, FileText, TrendingUp, Heart, Brain, Sparkles, Calendar, Shield } from "lucide-react";
 
 // --- Mock data (would come from DB in production) ---
 const weeklyMoodData = [
@@ -101,9 +101,7 @@ const ReportPage = () => {
   );
 
   return (
-    <div className="min-h-screen gradient-bg">
-      <Navbar />
-      <div className="pt-24 pb-12 px-4 container mx-auto max-w-5xl">
+    <div className="p-6 container mx-auto max-w-5xl">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-8 gap-4">
           <div>
@@ -253,8 +251,7 @@ const ReportPage = () => {
               ))}
             </ul>
           </SectionCard>
-        </div>
-      </div>
+    </div>
     </div>
   );
 };
