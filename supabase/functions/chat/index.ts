@@ -9,9 +9,13 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages } = await req.json();
+    const { messages, emotional_state } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    const emotionalContext = emotional_state
+      ? `\n\nThe user recently completed a mental health check-in and their current emotional state is: "${emotional_state}". Tailor your responses to be sensitive to this state. If they are stressed or anxious, prioritize calming techniques. If they seem happy, reinforce positive habits.`
+      : "";
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -34,7 +38,7 @@ serve(async (req) => {
 - Never diagnose or prescribe medication
 - Always remind users you're an AI companion, not a replacement for professional care
 
-IMPORTANT: Add a disclaimer if discussing serious mental health concerns: "Please reach out to a mental health professional or crisis helpline if you need immediate support."`,
+IMPORTANT: Add a disclaimer if discussing serious mental health concerns: "Please reach out to a mental health professional or crisis helpline if you need immediate support."${emotionalContext}`,
           },
           ...messages,
         ],
