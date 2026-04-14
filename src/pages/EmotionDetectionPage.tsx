@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Camera, CameraOff, Play, Square, AlertTriangle, BarChart3, RefreshCw } from "lucide-react";
-import { Camera, CameraOff, Play, Square, AlertTriangle, BarChart3, RefreshCw } from "lucide-react";
 
 const EMOTIONS = ["Happy", "Sad", "Angry", "Neutral", "Fear", "Surprise"] as const;
 type Emotion = (typeof EMOTIONS)[number];

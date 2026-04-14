@@ -5,7 +5,6 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
 import { Download, FileText, TrendingUp, Heart, Brain, Sparkles, Calendar, Shield } from "lucide-react";
-import { Download, FileText, TrendingUp, Heart, Brain, Sparkles, Calendar, Shield } from "lucide-react";
 
 // --- Mock data (would come from DB in production) ---
 const weeklyMoodData = [
