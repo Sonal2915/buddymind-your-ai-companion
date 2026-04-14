@@ -81,9 +81,9 @@ const QuestionnairePage = () => {
 
     if (user) {
       try {
-        const { error } = await supabase.from("questionnaire_results").insert({
+        const { error } = await (supabase.from("questionnaire_results") as any).insert({
           user_id: user.id,
-          answers: answers as unknown as Record<string, unknown>,
+          answers: answers,
           emotional_state: emotionalState,
           total_score: totalScore,
         });
